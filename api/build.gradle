@@ -1,39 +1,17 @@
-buildscript {
-    repositories {
-        jcenter()
-        mavenLocal()
-        mavenCentral()
-    }
-    dependencies {
-        classpath("org.springframework.boot:spring-boot-gradle-plugin:${springBootVersion}")
-    }
+plugins {
+    id 'java'
+    id 'org.springframework.boot'
+    // No need for shadow plugin here if bootJar is sufficient
 }
 
-apply plugin: 'org.springframework.boot'
-
-configurations.all {
-    resolutionStrategy {
-        force "org.codehaus.janino:janino:$sparkJaninoVersion"
-        force "org.codehaus.janino:commons-compiler:$sparkJaninoVersion"
-        force "com.fasterxml.jackson.core:jackson-core:$sparkJacksonVersion"
-        force "com.fasterxml.jackson.core:jackson-databind:$sparkJacksonVersion"
-    }
-}
+description = "API Module"
 
 dependencies {
-    compile project(':spark-driver')
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation project(':spark-driver')
 
-    compile("org.springframework.boot:spring-boot-starter-web") {
-        exclude module: 'spring-boot-starter-tomcat'
-        exclude module: 'spring-boot-starter-logging'
-    }
+    // For @Value annotation if used outside Spring managed beans (though usually not needed)
+    implementation 'org.springframework:spring-beans'
 
-    compile("org.springframework.boot:spring-boot-starter-jetty")
-    compile("org.springframework.boot:spring-boot-starter-actuator")
-
-    compile("org.slf4j:slf4j-api:$slf4jVersion")
-    compile("ch.qos.logback:logback-classic:$logbackVersion")
-
-    testCompile("junit:junit:$junitVersion")
-    testCompile("org.springframework:spring-test:$springFrameworkVersion")
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
 }

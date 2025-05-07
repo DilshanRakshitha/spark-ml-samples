@@ -3,7 +3,8 @@ package com.lohika.morning.ml.api.service;
 import com.lohika.morning.ml.spark.driver.service.lyrics.GenrePrediction;
 import com.lohika.morning.ml.spark.driver.service.lyrics.pipeline.LyricsPipeline;
 import java.util.Map;
-import javax.annotation.Resource;
+// import javax.annotation.Resource; // Old
+import jakarta.annotation.Resource; // New
 import org.apache.spark.ml.tuning.CrossValidatorModel;
 import org.springframework.stereotype.Component;
 

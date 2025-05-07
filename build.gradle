@@ -1,35 +1,88 @@
+plugins {
+  id 'java'
+  id 'org.springframework.boot' version '3.2.5' apply false // Apply in api module
+  id 'io.spring.dependency-management' version '1.1.5' apply false
+}
+
 allprojects {
-  group = 'com.morning.lohika.spark.ml'
-  version = '1.0-SNAPSHOT'
+  group = 'com.lohika.morning.ml'
+  version = '1.0.0-SNAPSHOT'
+
+  repositories {
+    mavenCentral()
+  }
 }
 
 subprojects {
   apply plugin: 'java'
-  sourceCompatibility = 1.8
-  targetCompatibility = 1.8
+  apply plugin: 'io.spring.dependency-management'
 
-  repositories {
-    jcenter()
-    mavenLocal()
-    mavenCentral()
+  java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+  }
 
-    maven {
-      url "http://dl.bintray.com/spark-packages/maven"
+  dependencyManagement {
+    imports {
+      mavenBom org.springframework.boot.gradle.plugin.SpringBootPlugin.BOM_VERSION
     }
+  }
+
+  dependencies {
+    compileOnly 'org.projectlombok:lombok'
+    annotationProcessor 'org.projectlombok:lombok'
+    testCompileOnly 'org.projectlombok:lombok'
+    testAnnotationProcessor 'org.projectlombok:lombok'
+  }
+
+  tasks.withType(JavaCompile) {
+    options.encoding = 'UTF-8'
+    options.compilerArgs << "-parameters" // For Spring MVC to get parameter names
+  }
+
+  tasks.withType(Test) {
+    useJUnitPlatform()
+    systemProperty("file.encoding", "UTF-8")
   }
 }
 
-// Definition of dependency versions.
-ext {
-  springBootVersion = '1.5.6.RELEASE'
-  slf4jVersion = '1.7.25'
-  logbackVersion = '1.2.3'
-  sparkJacksonVersion = '2.8.9'
-  sparkJaninoVersion = '2.7.8'
+// Configure shadowJar for the api module if it's the runnable one
+project(':api') {
+  apply plugin: 'org.springframework.boot'
+  apply plugin: 'io.spring.dependency-management' // Redundant but harmless
 
-  apacheSparkVersion = '2.2.0'
-  apacheSparkScalaVersion = '2.11'
+  bootJar {
+    archiveFileName = "${project.name}-${project.version}.jar"
+    mainClass = 'com.lohika.morning.ml.api.ApplicationConfiguration'
+  }
 
-  junitVersion = '4.12'
-  springFrameworkVersion = '4.3.11.RELEASE'
+  // If you still need a shadow JAR for a different purpose (e.g. non-boot runnable)
+  // tasks.register('shadowJar', com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar) {
+  //     archiveBaseName.set(project.name)
+  //     archiveClassifier.set('all')
+  //     mergeServiceFiles()
+  //     manifest {
+  //         attributes 'Main-Class': 'com.lohika.morning.ml.api.ApplicationConfiguration'
+  //     }
+  //     // Ensure dependencies from other modules are included if needed
+  //     from(project(':spark-driver').sourceSets.main.output)
+  //     from(project(':spark-distributed-library').sourceSets.main.output)
+  //     configurations = [project.configurations.runtimeClasspath]
+  // }
+}
+
+// Configure jar for spark-distributed-library
+project(':spark-distributed-library') {
+  jar {
+    archiveBaseName.set(project.name)
+    archiveVersion.set(project.version) // Or a fixed version like "1.0-SNAPSHOT"
+    archiveClassifier.set('all') // To match the expected name in properties
+    // If it needs to be a fat jar (though usually not for spark libraries)
+    // from { configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) } }
+  }
+}
+
+wrapper {
+  gradleVersion = '8.7'
+  distributionType = Wrapper.DistributionType.ALL
 }

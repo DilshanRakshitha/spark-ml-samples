@@ -4,7 +4,8 @@ import com.lohika.morning.ml.spark.distributed.library.function.map.product.ToTr
 import java.io.IOException;
 import java.util.UUID;
 import org.apache.spark.ml.Transformer;
-import org.apache.spark.ml.linalg.VectorUDT;
+// import org.apache.spark.ml.linalg.VectorUDT; // Old
+import org.apache.spark.ml.linalg.SQLDataTypes; // New
 import org.apache.spark.ml.param.ParamMap;
 import org.apache.spark.ml.util.*;
 import org.apache.spark.sql.Dataset;
@@ -27,21 +28,24 @@ public class FeatureExtractor extends Transformer implements MLWritable {
     }
 
     @Override
-    public Dataset<Row> transform(Dataset dataset) {
-        dataset = dataset.map(new ToTrainingExample(),
-                RowEncoder.apply(transformSchema(dataset.schema())));
+    public Dataset<Row> transform(Dataset<?> dataset) { // Use wildcard
+        Dataset<Row> workingDataset = (Dataset<Row>) dataset; // Cast
 
-//        dataset.count();
-//        dataset.cache();
+        workingDataset = workingDataset.map(new ToTrainingExample(),
+                RowEncoder.apply(transformSchema(workingDataset.schema())));
 
-        return dataset;
+//        workingDataset.count(); // Action to trigger transformation if lazy
+//        workingDataset.cache(); // Consider if caching is necessary here or higher up
+
+        return workingDataset;
     }
 
     @Override
     public StructType transformSchema(StructType schema) {
         return new StructType(new StructField[]{
-                DataTypes.createStructField("label", DataTypes.StringType, false),
-                DataTypes.createStructField("features", new VectorUDT(), false)});
+                DataTypes.createStructField("label", DataTypes.StringType, false), // From ToTrainingExample: inputRow.getAs("target") - target is string
+                DataTypes.createStructField("features", SQLDataTypes.VectorType(), false) // Updated
+        });
     }
 
     @Override
@@ -67,4 +71,8 @@ public class FeatureExtractor extends Transformer implements MLWritable {
     public static MLReader<FeatureExtractor> read() {
         return new DefaultParamsReader<>();
     }
+
+    // public static FeatureExtractor load(String path) throws IOException {
+    //    return read().load(path);
+    // }
 }

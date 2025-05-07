@@ -39,7 +39,7 @@ public class TFIDFTest extends BaseTest {
 
         int numFeatures = 5;
         HashingTF hashingTF = new HashingTF()
-                .setInputCol("sentence")
+                .setInputCol("words")
                 .setOutputCol("rawFeatures")
                 .setNumFeatures(numFeatures);
 
