@@ -1,5 +1,4 @@
-rootProject.name = 'spark-ml-sample'
-
-include 'api'
-include 'spark-driver'
-include 'spark-distributed-library'
+rootProject.name = 'spark-ml-samples'
+include ':spark-distributed-library'
+include ':spark-driver'
+include ':api'

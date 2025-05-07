@@ -1,24 +1,51 @@
-// dilshanrakshitha-spark-ml-samples/spark-distributed-library/build.gradle
-
-plugins {
-    id 'java-library'
-    // 'java' and 'io.spring.dependency-management' are applied via subprojects block in root
+buildscript {
+    repositories { 
+        jcenter()
+        flatDir {
+            dirs 'libs'
+        } 
+    }
+    dependencies {
+        classpath 'com.github.jengelman.gradle.plugins:shadow:'
+    }
 }
 
-// Repositories are inherited from allprojects in root, but can be added here if specific
- repositories {
-   mavenCentral() // Usually not needed if in root's allprojects
- }
+// This plugin provides the 'shadowJar' task, which create an assembly jar.
+// Because Spark requires your jar to bundle everything except spark and hadoop.
+plugins {
+    id 'com.github.johnrengelman.shadow' version '1.2.3'
+}
 
 jar {
-    archiveClassifier.set('all') // If you want the JAR to be named project-name-all-version.jar
+    baseName = 'spark-distributed-library'
+}
+
+configurations {
+    all*.exclude group: 'org.eclipse.jetty.orbit', module: 'javax.servlet'
+    all*.exclude group: 'org.slf4j', module: 'slf4j-log4j12'
+}
+
+configurations.all {
+    resolutionStrategy {
+        force "org.codehaus.janino:janino:$sparkJaninoVersion"
+        force "org.codehaus.janino:commons-compiler:$sparkJaninoVersion"
+    }
 }
 
 dependencies {
-    api "org.apache.spark:spark-core_${rootProject.ext.scalaBaseVersion}:${rootProject.ext.sparkVersion}"
-    api "org.apache.spark:spark-sql_${rootProject.ext.scalaBaseVersion}:${rootProject.ext.sparkVersion}"
-    api "org.apache.spark:spark-mllib_${rootProject.ext.scalaBaseVersion}:${rootProject.ext.sparkVersion}"
-    api "org.apache.spark:spark-ml_${rootProject.ext.scalaBaseVersion}:${rootProject.ext.sparkVersion}" // Problematic one
+    // All Spark dependencies should not be in shadowJar.
+    compile("org.apache.spark:spark-core_$apacheSparkScalaVersion:$apacheSparkVersion")
+    compile("org.apache.spark:spark-sql_$apacheSparkScalaVersion:$apacheSparkVersion")
+    compile("org.apache.spark:spark-mllib_$apacheSparkScalaVersion:$apacheSparkVersion")
+    compile("org.apache.spark:spark-mllib-local_${apacheSparkScalaVersion}:${apacheSparkVersion}")
 
-    implementation "org.tartarus:snowball:${rootProject.ext.snowballVersion}" // Problematic one
+
+    compile("ch.qos.logback:logback-classic:$logbackVersion")
+    compile("master:spark-stemming:0.1.1")
+
+}
+
+configurations {
+    // We don't want the Spark dependencies in our shadowJar.
+    runtime.exclude group: 'org.apache.spark'
 }

@@ -1,92 +1,36 @@
-// dilshanrakshitha-spark-ml-samples/build.gradle
-
-plugins {
-  // Declare plugin versions for subprojects to use, but don't apply them to the root.
-  id 'java' // Base Java plugin applied to root, can be useful for root-level tasks
-  id 'org.springframework.boot' version '2.7.18' apply false
-  id 'io.spring.dependency-management' version '1.0.15.RELEASE' apply false
-  id 'com.github.johnrengelman.shadow' version '8.1.1' apply false // Or your preferred shadow version
-}
-
-// Global Java settings
-java {
-  toolchain {
-    languageVersion = JavaLanguageVersion.of(17) // For Gradle daemon and compilation if not overridden
-  }
-}
-// Default source/target compatibility for all projects (can be overridden in subprojects)
-sourceCompatibility = JavaVersion.VERSION_17
-targetCompatibility = JavaVersion.VERSION_17
-
-
-// Common properties accessible by all subprojects
-ext {
-  sparkVersion = '3.5.1'
-  lombokVersion = '1.18.30'
-  scalaBaseVersion = '2.12'
-  springBootVersion = '2.7.18' // Consistent with the plugin version above
-  jakartaAnnotationApiVersion = '2.1.1'
-  snowballVersion = '1.0'
-}
-
 allprojects {
-//  group = 'com.lohika.morning.ml'
-//  version = '1.0-SNAPSHOT'
-
-  repositories {
-    mavenCentral()
-  }
-
-  // Apply Java plugin to all subprojects by default
-  // (Root project already has 'java' plugin from the top-level 'plugins' block)
-  if (project != rootProject) {
-    apply plugin: 'java'
-  }
-
-  // Consistent Java toolchain for all projects (can be overridden)
-  java {
-    toolchain {
-      languageVersion = JavaLanguageVersion.of(17)
-    }
-  }
+  group = 'com.morning.lohika.spark.ml'
+  version = '1.0-SNAPSHOT'
 }
 
 subprojects {
-  // Common Java compatibility for subprojects (if different from root)
-  java {
-    sourceCompatibility = JavaVersion.VERSION_1_8 // As you had it before
-    targetCompatibility = JavaVersion.VERSION_1_8 // As you had it before
-  }
+  apply plugin: 'java'
+  sourceCompatibility = 1.8
+  targetCompatibility = 1.8
 
-  // Apply Spring dependency management to all subprojects
-  // This ensures consistent versions for Spring libraries
-  apply plugin: 'io.spring.dependency-management'
-  dependencyManagement {
-    imports {
-      mavenBom "org.springframework.boot:spring-boot-dependencies:${rootProject.ext.springBootVersion}"
+  repositories {
+    jcenter()
+    mavenLocal()
+    mavenCentral()
+
+    flatDir {
+        dirs "${rootProject.projectDir}/spark-distributed-library/libs"
     }
-  }
-
-  // Common dependencies like Lombok
-  dependencies {
-    compileOnly "org.projectlombok:lombok:${rootProject.ext.lombokVersion}"
-    annotationProcessor "org.projectlombok:lombok:${rootProject.ext.lombokVersion}"
-    testCompileOnly "org.projectlombok:lombok:${rootProject.ext.lombokVersion}"
-    testAnnotationProcessor "org.projectlombok:lombok:${rootProject.ext.lombokVersion}"
-  }
-
-  tasks.withType(JavaCompile) {
-    options.encoding = 'UTF-8'
-    options.compilerArgs << "-parameters"
-  }
-
-  tasks.withType(Test) {
-    useJUnitPlatform()
-    systemProperty("file.encoding", "UTF-8")
+    
   }
 }
 
-wrapper {
-  gradleVersion = '8.7'
-  distributionType = Wrapper.DistributionType.ALL
+// Definition of dependency versions.
+ext {
+  springBootVersion = '1.5.6.RELEASE'
+  slf4jVersion = '1.7.25'
+  logbackVersion = '1.2.3'
+  sparkJacksonVersion = '2.8.9'
+  sparkJaninoVersion = '2.7.8'
+
+  apacheSparkVersion = '2.2.0'
+  apacheSparkScalaVersion = '2.11'
+
+  junitVersion = '4.12'
+  springFrameworkVersion = '4.3.11.RELEASE'
 }

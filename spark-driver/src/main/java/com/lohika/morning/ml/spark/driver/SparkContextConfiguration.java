@@ -1,6 +1,7 @@
 package com.lohika.morning.ml.spark.driver;
 
-// import org.apache.spark.SparkContext; // No longer directly creating SparkContext first
+import org.apache.spark.SparkConf;
+import org.apache.spark.SparkContext;
 import org.apache.spark.sql.SparkSession;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -8,13 +9,31 @@ import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.PropertySource;
 import org.springframework.context.support.PropertySourcesPlaceholderConfigurer;
-import java.util.Arrays;
-import java.util.stream.Collectors;
 
 @Configuration
 @PropertySource("classpath:spark.properties")
 @ComponentScan("com.lohika.morning.ml.spark.driver.*")
 public class SparkContextConfiguration {
+
+    @Bean
+    public SparkSession sparkSession() {
+        SparkConf sparkConf = new SparkConf()
+                .setMaster(master)
+                .setAppName(applicationName)
+                .setJars(distributedLibraries)
+                .set("spark.cores.max", coresMax)
+                .set("spark.driver.memory", driverMemory)
+                .set("spark.executor.memory", executorMemory)
+                .set("spark.serializer", serializer)
+                .set("spark.kryoserializer.buffer.max", kryoserializerBufferMax)
+                .set("spark.kryo.registrationRequired", "false")
+                .set("spark.sql.shuffle.partitions", sqlShufflePartitions)
+                .set("spark.default.parallelism", defaultParallelism);
+
+        SparkContext sparkContext = new SparkContext(sparkConf);
+
+        return new SparkSession(sparkContext);
+    }
 
     @Value("${spark.master}")
     private String master;
@@ -22,10 +41,10 @@ public class SparkContextConfiguration {
     @Value("${spark.application-name}")
     private String applicationName;
 
-    @Value("${spark.distributed-libraries:}") // Default to empty string if not present
+    @Value("${spark.distributed-libraries}")
     private String[] distributedLibraries;
 
-    @Value("${spark.cores.max:}") // Allow empty, Spark will use default
+    @Value("${spark.cores.max}")
     private String coresMax;
 
     @Value("${spark.driver.memory}")
@@ -47,36 +66,13 @@ public class SparkContextConfiguration {
     private String kryoserializerBufferMax;
 
     @Bean
-    public SparkSession sparkSession() {
-        SparkSession.Builder builder = SparkSession.builder()
-                .master(master)
-                .appName(applicationName)
-                .config("spark.driver.memory", driverMemory)
-                .config("spark.executor.memory", executorMemory)
-                .config("spark.serializer", serializer)
-                .config("spark.kryoserializer.buffer.max", kryoserializerBufferMax)
-                .config("spark.kryo.registrationRequired", "false") // Common Kryo setting
-                .config("spark.sql.shuffle.partitions", sqlShufflePartitions)
-                .config("spark.default.parallelism", defaultParallelism);
-
-        if (distributedLibraries != null && distributedLibraries.length > 0) {
-            String validJars = Arrays.stream(distributedLibraries)
-                    .filter(jar -> jar != null && !jar.trim().isEmpty() && !jar.contains("<should be")) // Filter out placeholders
-                    .collect(Collectors.joining(","));
-            if (!validJars.isEmpty()) {
-                builder.config("spark.jars", validJars);
-            }
-        }
-
-        if (coresMax != null && !coresMax.isEmpty()) {
-            builder.config("spark.cores.max", coresMax);
-        }
-
-        return builder.getOrCreate();
-    }
-
-    @Bean
+    // Static is extremely important here.
+    // It should be created before @Configuration as it is also component.
     public static PropertySourcesPlaceholderConfigurer propertySourcesPlaceholderConfigurer() {
         return new PropertySourcesPlaceholderConfigurer();
     }
+
 }
+
+
+

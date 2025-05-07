@@ -13,10 +13,9 @@ import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.Metadata;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
-import org.junit.Test; // Ensure this is org.junit.Test for JUnit 4 if BaseTest uses SpringJUnit4ClassRunner
-// Or org.junit.jupiter.api.Test for JUnit 5 (if BaseTest is updated)
+import org.junit.Test;
 
-public class TFIDFTest extends BaseTest { // BaseTest uses SpringJUnit4ClassRunner
+public class TFIDFTest extends BaseTest {
 
     @Test
     public void test() {
@@ -35,18 +34,18 @@ public class TFIDFTest extends BaseTest { // BaseTest uses SpringJUnit4ClassRunn
         Dataset<Row> wordsData = tokenizer.transform(sentenceData);
 
         System.out.println("Words:\n");
-        wordsData.select("label", "words").show(false); // Using show for better readability
+        System.out.println(wordsData.select("label", "words").collectAsList());
         System.out.println("----------------");
 
-        int numFeatures = 20; // Increased for more realistic hashing
+        int numFeatures = 5;
         HashingTF hashingTF = new HashingTF()
-                .setInputCol("words") // Corrected from "sentence"
+                .setInputCol("words")
                 .setOutputCol("rawFeatures")
                 .setNumFeatures(numFeatures);
 
         Dataset<Row> featurizedData = hashingTF.transform(wordsData);
-        System.out.println("Raw Features (TF):\n");
-        featurizedData.select("label", "rawFeatures").show(false);
+        System.out.println("Raw Features:\n");
+        System.out.println(featurizedData.select("label", "rawFeatures").collectAsList());
         System.out.println("----------------");
 
         IDF idf = new IDF().setInputCol("rawFeatures").setOutputCol("features");
@@ -54,8 +53,9 @@ public class TFIDFTest extends BaseTest { // BaseTest uses SpringJUnit4ClassRunn
 
         Dataset<Row> rescaledData = idfModel.transform(featurizedData);
 
-        System.out.println("Features (TF-IDF):\n");
-        rescaledData.select("label", "features").show(false);
+        System.out.println("Features:\n");
+        System.out.println(rescaledData.select("label", "features").collectAsList());
         System.out.println("----------------");
     }
+
 }

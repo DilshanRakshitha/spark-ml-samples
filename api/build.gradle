@@ -1,47 +1,44 @@
-// dilshanrakshitha-spark-ml-samples/api/build.gradle
-
-plugins {
-    id 'org.springframework.boot' // Version is managed by root build.gradle's plugins block
-    id 'com.github.johnrengelman.shadow' // Version is managed by root build.gradle
-    // 'java' and 'io.spring.dependency-management' are applied via subprojects block in root
-}
-
-// Repositories are inherited from allprojects in root, but can be added here if specific to :api
-// repositories {
-//   mavenCentral() // Usually not needed if in root's allprojects
-// }
-repositories {
-    mavenCentral() // Ensure this is first or present
-    // If Spring Boot adds its own, list them after:
-    // maven { url "https://repo.spring.io/milestone" }
-    // maven { url "https://repo.spring.io/snapshot" }
-}
-
-bootJar {
-    archiveFileName = "${project.name}-${project.version}.jar"
-    mainClass = 'com.lohika.morning.ml.api.ApplicationConfiguration'
-}
-
-shadowJar {
-    archiveBaseName.set(project.name)
-    archiveClassifier.set('all') // Creates project-name-all-version.jar
-    mergeServiceFiles()
-    manifest {
-        attributes(
-                'Main-Class': 'org.springframework.boot.loader.launch.JarLauncher',
-                'Start-Class': 'com.lohika.morning.ml.api.ApplicationConfiguration'
-        )
+buildscript {
+    repositories {
+        jcenter()
+        mavenLocal()
+        mavenCentral()
     }
-    from(sourceSets.main.output)
-    configurations = [project.configurations.runtimeClasspath]
+    dependencies {
+        classpath("org.springframework.boot:spring-boot-gradle-plugin:${springBootVersion}")
+    }
+}
+
+apply plugin: 'org.springframework.boot'
+
+configurations.all {
+    resolutionStrategy {
+        force "org.codehaus.janino:janino:$sparkJaninoVersion"
+        force "org.codehaus.janino:commons-compiler:$sparkJaninoVersion"
+        force "com.fasterxml.jackson.core:jackson-core:$sparkJacksonVersion"
+        force "com.fasterxml.jackson.core:jackson-databind:$sparkJacksonVersion"
+    }
 }
 
 dependencies {
-    implementation 'org.springframework.boot:spring-boot-starter-web' // Version managed by BOM
-    implementation project(':spark-driver')
-    // jakarta.annotation-api should be included by spring-boot-starter-web for Spring Boot 2.7.x
-    // If not, uncomment and ensure version is defined in rootProject.ext
-    // implementation "jakarta.annotation:jakarta.annotation-api:${rootProject.ext.jakartaAnnotationApiVersion}"
+    compile project(':spark-driver')
 
-    // testImplementation 'org.springframework.boot:spring-boot-starter-test' // Version managed by BOM
+    compile("org.springframework.boot:spring-boot-starter-web") {
+        exclude module: 'spring-boot-starter-tomcat'
+        exclude module: 'spring-boot-starter-logging'
+    }
+
+    compile("org.springframework.boot:spring-boot-starter-jetty")
+    compile("org.springframework.boot:spring-boot-starter-actuator")
+    compile("org.apache.spark:spark-mllib_${apacheSparkScalaVersion}:${apacheSparkVersion}")
+    compile("org.apache.spark:spark-sql_${apacheSparkScalaVersion}:${apacheSparkVersion}")
+    compile("org.apache.spark:spark-core_${apacheSparkScalaVersion}:${apacheSparkVersion}")
+    compile("org.apache.spark:spark-mllib-local_${apacheSparkScalaVersion}:${apacheSparkVersion}")
+
+
+    compile("org.slf4j:slf4j-api:$slf4jVersion")
+    compile("ch.qos.logback:logback-classic:$logbackVersion")
+
+    testCompile("junit:junit:$junitVersion")
+    testCompile("org.springframework:spring-test:$springFrameworkVersion")
 }
