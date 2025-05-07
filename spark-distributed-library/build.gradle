@@ -1,21 +1,24 @@
+// dilshanrakshitha-spark-ml-samples/spark-distributed-library/build.gradle
+
 plugins {
-    id 'java'
+    id 'java-library'
+    // 'java' and 'io.spring.dependency-management' are applied via subprojects block in root
 }
 
-description = "Spark Distributed Library"
+// Repositories are inherited from allprojects in root, but can be added here if specific
+ repositories {
+   mavenCentral() // Usually not needed if in root's allprojects
+ }
 
-ext {
-    sparkVersion = '3.5.1' // Consistent with spark-driver
+jar {
+    archiveClassifier.set('all') // If you want the JAR to be named project-name-all-version.jar
 }
 
 dependencies {
-    api "org.apache.spark:spark-sql_2.12:${sparkVersion}" // api to expose to spark-driver
-    api "org.apache.spark:spark-mllib_2.12:${sparkVersion}"
-    api "org.apache.spark:spark-ml_2.12:${sparkVersion}"
+    api "org.apache.spark:spark-core_${rootProject.ext.scalaBaseVersion}:${rootProject.ext.sparkVersion}"
+    api "org.apache.spark:spark-sql_${rootProject.ext.scalaBaseVersion}:${rootProject.ext.sparkVersion}"
+    api "org.apache.spark:spark-mllib_${rootProject.ext.scalaBaseVersion}:${rootProject.ext.sparkVersion}"
+    api "org.apache.spark:spark-ml_${rootProject.ext.scalaBaseVersion}:${rootProject.ext.sparkVersion}" // Problematic one
 
-    implementation 'org.tartarus:snowball:1.0' // For stemmer
-}
-
-jar {
-    archiveClassifier = 'all' // To produce spark-distributed-library-VERSION-all.jar
+    implementation "org.tartarus:snowball:${rootProject.ext.snowballVersion}" // Problematic one
 }

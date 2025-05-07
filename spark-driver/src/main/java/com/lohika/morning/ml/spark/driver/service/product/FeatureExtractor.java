@@ -4,8 +4,7 @@ import com.lohika.morning.ml.spark.distributed.library.function.map.product.ToTr
 import java.io.IOException;
 import java.util.UUID;
 import org.apache.spark.ml.Transformer;
-// import org.apache.spark.ml.linalg.VectorUDT; // Old
-import org.apache.spark.ml.linalg.SQLDataTypes; // New
+import org.apache.spark.ml.linalg.SQLDataTypes; // Changed
 import org.apache.spark.ml.param.ParamMap;
 import org.apache.spark.ml.util.*;
 import org.apache.spark.sql.Dataset;
@@ -28,14 +27,14 @@ public class FeatureExtractor extends Transformer implements MLWritable {
     }
 
     @Override
-    public Dataset<Row> transform(Dataset<?> dataset) { // Use wildcard
-        Dataset<Row> workingDataset = (Dataset<Row>) dataset; // Cast
+    public Dataset<Row> transform(Dataset<?> dataset) {
+        Dataset<Row> workingDataset = (Dataset<Row>) dataset; // Cast for type safety
 
         workingDataset = workingDataset.map(new ToTrainingExample(),
                 RowEncoder.apply(transformSchema(workingDataset.schema())));
 
-//        workingDataset.count(); // Action to trigger transformation if lazy
-//        workingDataset.cache(); // Consider if caching is necessary here or higher up
+        // workingDataset.count(); // Consider if eager evaluation is needed here
+        // workingDataset.cache(); // Consider caching implications
 
         return workingDataset;
     }
@@ -43,14 +42,15 @@ public class FeatureExtractor extends Transformer implements MLWritable {
     @Override
     public StructType transformSchema(StructType schema) {
         return new StructType(new StructField[]{
-                DataTypes.createStructField("label", DataTypes.StringType, false), // From ToTrainingExample: inputRow.getAs("target") - target is string
-                DataTypes.createStructField("features", SQLDataTypes.VectorType(), false) // Updated
+                // Ensure label type matches what ToTrainingExample produces (String for target)
+                DataTypes.createStructField("label", DataTypes.StringType, false),
+                DataTypes.createStructField("features", SQLDataTypes.VectorType(), false) // Changed
         });
     }
 
     @Override
     public Transformer copy(ParamMap extra) {
-        return super.defaultCopy(extra);
+        return defaultCopy(extra);
     }
 
     @Override
@@ -72,7 +72,8 @@ public class FeatureExtractor extends Transformer implements MLWritable {
         return new DefaultParamsReader<>();
     }
 
+    // Optional: If custom loading logic is ever needed
     // public static FeatureExtractor load(String path) throws IOException {
-    //    return read().load(path);
+    //     return read().load(path);
     // }
 }

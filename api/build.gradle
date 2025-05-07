@@ -1,17 +1,47 @@
+// dilshanrakshitha-spark-ml-samples/api/build.gradle
+
 plugins {
-    id 'java'
-    id 'org.springframework.boot'
-    // No need for shadow plugin here if bootJar is sufficient
+    id 'org.springframework.boot' // Version is managed by root build.gradle's plugins block
+    id 'com.github.johnrengelman.shadow' // Version is managed by root build.gradle
+    // 'java' and 'io.spring.dependency-management' are applied via subprojects block in root
 }
 
-description = "API Module"
+// Repositories are inherited from allprojects in root, but can be added here if specific to :api
+// repositories {
+//   mavenCentral() // Usually not needed if in root's allprojects
+// }
+repositories {
+    mavenCentral() // Ensure this is first or present
+    // If Spring Boot adds its own, list them after:
+    // maven { url "https://repo.spring.io/milestone" }
+    // maven { url "https://repo.spring.io/snapshot" }
+}
+
+bootJar {
+    archiveFileName = "${project.name}-${project.version}.jar"
+    mainClass = 'com.lohika.morning.ml.api.ApplicationConfiguration'
+}
+
+shadowJar {
+    archiveBaseName.set(project.name)
+    archiveClassifier.set('all') // Creates project-name-all-version.jar
+    mergeServiceFiles()
+    manifest {
+        attributes(
+                'Main-Class': 'org.springframework.boot.loader.launch.JarLauncher',
+                'Start-Class': 'com.lohika.morning.ml.api.ApplicationConfiguration'
+        )
+    }
+    from(sourceSets.main.output)
+    configurations = [project.configurations.runtimeClasspath]
+}
 
 dependencies {
-    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-web' // Version managed by BOM
     implementation project(':spark-driver')
+    // jakarta.annotation-api should be included by spring-boot-starter-web for Spring Boot 2.7.x
+    // If not, uncomment and ensure version is defined in rootProject.ext
+    // implementation "jakarta.annotation:jakarta.annotation-api:${rootProject.ext.jakartaAnnotationApiVersion}"
 
-    // For @Value annotation if used outside Spring managed beans (though usually not needed)
-    implementation 'org.springframework:spring-beans'
-
-    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    // testImplementation 'org.springframework.boot:spring-boot-starter-test' // Version managed by BOM
 }

@@ -1,0 +1,9 @@
+"java.configuration.runtimes": [
+    {
+        "name": "JavaSE-1.8",
+        "path": "/usr/lib/jvm/java-8-openjdk-amd64",
+        "default": true
+    }
+],
+"java.import.gradle.java.home": "/usr/lib/jvm/java-8-openjdk-amd64",
+"java.import.maven.java.home": "/usr/lib/jvm/java-8-openjdk-amd64"
