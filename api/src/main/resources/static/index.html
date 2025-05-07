@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lyrics Genre Prediction</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- Include Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <h1>Lyrics Genre Predictor & Trainer</h1>
+
+    <div class="container">
+        <div class="input-section">
+            <label for="lyricsInput">Enter Lyrics:</label>
+            <textarea id="lyricsInput" rows="10" placeholder="Paste song lyrics here..."></textarea>
+
+            <label for="modelSelect">Select Model:</label>
+            <select id="modelSelect">
+                <option value="LogisticRegressionPipeline">Logistic Regression</option>
+                <option value="FeedForwardNeuralNetworkPipeline">Feed Forward Neural Network</option>
+                <option value="NaiveBayesBagOfWordsPipeline">Naive Bayes (BoW)</option>
+                <option value="NaiveBayesTFIDFPipeline">Naive Bayes (TF-IDF)</option>
+                <option value="RandomForestPipeline">Random Forest</option>
+                <!-- Add other pipeline component names here if needed -->
+            </select>
+
+            <div class="buttons">
+                <button id="predictButton">Predict Genre</button>
+                <button id="trainButton">Train Selected Model</button>
+            </div>
+             <div id="statusMessage" class="status"></div>
+        </div>
+
+        <div class="output-section">
+            <h2>Prediction Result</h2>
+            <div id="predictionResult">Prediction will appear here...</div>
+            <div class="chart-container">
+                <canvas id="probabilityChart"></canvas>
+            </div>
+             <h2>Training Statistics</h2>
+             <pre id="trainingStats">Training stats will appear here...</pre>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
