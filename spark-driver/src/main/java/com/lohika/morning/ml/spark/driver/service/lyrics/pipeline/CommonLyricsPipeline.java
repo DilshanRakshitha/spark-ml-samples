@@ -1,6 +1,8 @@
 package com.lohika.morning.ml.spark.driver.service.lyrics.pipeline;
 
 import static com.lohika.morning.ml.spark.distributed.library.function.map.lyrics.Column.*;
+import static org.apache.spark.sql.functions.*; // Add this import
+
 import com.lohika.morning.ml.spark.driver.service.MLService;
 import com.lohika.morning.ml.spark.driver.service.lyrics.Genre;
 import com.lohika.morning.ml.spark.driver.service.lyrics.GenrePrediction;
@@ -12,6 +14,7 @@ import org.apache.spark.ml.PipelineModel;
 import org.apache.spark.ml.linalg.DenseVector;
 import org.apache.spark.ml.tuning.CrossValidatorModel;
 import org.apache.spark.sql.*;
+import org.apache.spark.sql.types.DataTypes; // Add this import
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 
@@ -23,9 +26,11 @@ public abstract class CommonLyricsPipeline implements LyricsPipeline {
     @Autowired
     private MLService mlService;
 
-    @Value("${lyrics.training.set.directory.path}")
-    private String lyricsTrainingSetDirectoryPath;
+    // Change this property name to match application.properties
+    @Value("${lyrics.training.set.csv.path}")
+    private String lyricsTrainingSetCsvPath;
 
+    // Keep this for the output model directory
     @Value("${lyrics.model.directory.path}")
     private String lyricsModelDirectoryPath;
 
@@ -35,9 +40,14 @@ public abstract class CommonLyricsPipeline implements LyricsPipeline {
         Dataset<String> lyricsDataset = sparkSession.createDataset(Arrays.asList(lyrics),
            Encoders.STRING());
 
+        // Prepare the input DataFrame for prediction - needs 'value' column
         Dataset<Row> unknownLyricsDataset = lyricsDataset
+                // Rename 'value' column from createDataset to match the 'value' column used in training read
+                .withColumnRenamed("value", VALUE.getName())
                 .withColumn(LABEL.getName(), functions.lit(Genre.UNKNOWN.getValue()))
-                .withColumn(ID.getName(), functions.lit("unknown.txt"));
+                // Add a dummy ID if needed by any transformer, otherwise might not be necessary for prediction
+                .withColumn(ID.getName(), monotonically_increasing_id().cast(DataTypes.StringType)); // Add ID for prediction
+
 
         CrossValidatorModel model = mlService.loadCrossValidationModel(getModelDirectory());
         getModelStatistics(model);
@@ -63,36 +73,75 @@ public abstract class CommonLyricsPipeline implements LyricsPipeline {
         return new GenrePrediction(getGenre(prediction).getName());
     }
 
+    // --- REFACTORED DATA READING ---
     Dataset<Row> readLyrics() {
-        Dataset input = readLyricsForGenre(lyricsTrainingSetDirectoryPath, Genre.METAL)
-                                                .union(readLyricsForGenre(lyricsTrainingSetDirectoryPath, Genre.POP));
-        // Reduce the input amount of partition minimal amount (spark.default.parallelism OR 2, whatever is less)
-        input = input.coalesce(sparkSession.sparkContext().defaultMinPartitions()).cache();
+        System.out.println("Reading training data from CSV: " + lyricsTrainingSetCsvPath);
+
+        // Read the CSV file
+        Dataset<Row> rawData = sparkSession.read()
+                .option("header", "true") // Use first line as header
+                .option("inferSchema", "true") // Infer column types (might need manual schema for large datasets)
+                .option("escape", "\"") // Handle quotes within lyrics if any
+                .csv(lyricsTrainingSetCsvPath);
+
+        // Filter for only 'metal' and 'pop' genres (as the original code focused on binary classification)
+        // Adjust this if you want multi-class classification later
+        Dataset<Row> filteredData = rawData
+                .filter(col("genre").equalTo("metal").or(col("genre").equalTo("pop")));
+
+        System.out.println("Total sentences after filtering for metal/pop: " + filteredData.count());
+
+
+        // Prepare the DataFrame for the pipeline
+        Dataset<Row> preparedData = filteredData
+                // Select the lyrics column and rename it to 'value' as expected by Cleanser
+                .withColumnRenamed("lyrics", VALUE.getName())
+                // Create the numeric 'label' column based on the 'genre' text column
+                // Metal = 0.0, Pop = 1.0 (matching the original Genre enum)
+                .withColumn(LABEL.getName(),
+                        when(col("genre").equalTo("metal"), lit(0.0))
+                        .otherwise(lit(1.0)) // Assuming anything not metal is pop after filtering
+                )
+                 // Add a unique ID column - needed for downstream transformers like Numerator/Exploder/Uniter/Verser
+                .withColumn(ID.getName(), monotonically_increasing_id().cast(DataTypes.StringType))
+                // Select only the columns needed for the pipeline start
+                .select(ID.getName(), LABEL.getName(), VALUE.getName());
+
+        // Filter out potential nulls or empty strings in the 'value' column after processing
+        preparedData = preparedData
+                            .filter(col(VALUE.getName()).isNotNull())
+                            .filter(col(VALUE.getName()).notEqual(""))
+                            .filter(col(VALUE.getName()).contains(" ")); // Keep original filter
+
+
+        // Reduce partitions and cache
+        preparedData = preparedData.coalesce(sparkSession.sparkContext().defaultMinPartitions()).cache();
         // Force caching.
-        input.count();
+        long count = preparedData.count();
+        System.out.println("Final count of prepared sentences: " + count);
 
-        return input;
+        // Show a sample to verify
+        System.out.println("Sample of prepared data:");
+        preparedData.show(5, false); // Show 5 rows, don't truncate
+
+        return preparedData;
     }
 
+    // This method is no longer needed as we read from a single CSV
+    /*
     private Dataset<Row> readLyricsForGenre(String inputDirectory, Genre genre) {
-        Dataset<Row> lyrics = readLyrics(inputDirectory, genre.name().toLowerCase() + "/*");
-        Dataset<Row> labeledLyrics = lyrics.withColumn(LABEL.getName(), functions.lit(genre.getValue()));
-
-        System.out.println(genre.name() + " music sentences = " + lyrics.count());
-
-        return labeledLyrics;
+        // ... original code ...
     }
+    */
 
+    // This method is no longer needed as we read from a single CSV
+    /*
     private Dataset<Row> readLyrics(String inputDirectory, String path) {
-        Dataset<String> rawLyrics = sparkSession.read().textFile(Paths.get(inputDirectory).resolve(path).toString());
-        rawLyrics = rawLyrics.filter(rawLyrics.col(VALUE.getName()).notEqual(""));
-        rawLyrics = rawLyrics.filter(rawLyrics.col(VALUE.getName()).contains(" "));
-
-        // Add source filename column as a unique id.
-        Dataset<Row> lyrics = rawLyrics.withColumn(ID.getName(), functions.input_file_name());
-
-        return lyrics;
+        // ... original code ...
     }
+    */
+    // --- END OF REFACTORED DATA READING ---
+
 
     private Genre getGenre(Double value) {
         for (Genre genre: Genre.values()){
@@ -100,7 +149,8 @@ public abstract class CommonLyricsPipeline implements LyricsPipeline {
                 return genre;
             }
         }
-
+        // If the model predicts something other than 0.0 or 1.0, return UNKNOWN
+        System.out.println("Warning: Model predicted an unknown label value: " + value);
         return Genre.UNKNOWN;
     }
 
@@ -108,8 +158,13 @@ public abstract class CommonLyricsPipeline implements LyricsPipeline {
     public Map<String, Object> getModelStatistics(CrossValidatorModel model) {
         Map<String, Object> modelStatistics = new HashMap<>();
 
-        Arrays.sort(model.avgMetrics());
-        modelStatistics.put("Best model metrics", model.avgMetrics()[model.avgMetrics().length - 1]);
+        // Handle potential case where model hasn't been trained yet or failed
+        if (model.avgMetrics() != null && model.avgMetrics().length > 0) {
+             Arrays.sort(model.avgMetrics());
+             modelStatistics.put("Best model metrics (higher is better, e.g., AreaUnderROC)", model.avgMetrics()[model.avgMetrics().length - 1]);
+        } else {
+             modelStatistics.put("Best model metrics", "N/A (Model training might have failed or metrics unavailable)");
+        }
 
         return modelStatistics;
     }
@@ -129,8 +184,9 @@ public abstract class CommonLyricsPipeline implements LyricsPipeline {
         this.mlService.saveModel(model, modelOutputDirectory);
     }
 
-    public void setLyricsTrainingSetDirectoryPath(String lyricsTrainingSetDirectoryPath) {
-        this.lyricsTrainingSetDirectoryPath = lyricsTrainingSetDirectoryPath;
+    // Keep setters for testability if needed
+    public void setLyricsTrainingSetCsvPath(String lyricsTrainingSetCsvPath) {
+        this.lyricsTrainingSetCsvPath = lyricsTrainingSetCsvPath;
     }
 
     public void setLyricsModelDirectoryPath(String lyricsModelDirectoryPath) {
