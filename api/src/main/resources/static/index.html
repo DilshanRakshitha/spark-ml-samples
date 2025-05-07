@@ -12,6 +12,7 @@
     <h1>Lyrics Genre Predictor & Trainer</h1>
 
     <div class="container">
+        <!-- Input Section -->
         <div class="input-section">
             <label for="lyricsInput">Enter Lyrics:</label>
             <textarea id="lyricsInput" rows="10" placeholder="Paste song lyrics here..."></textarea>
@@ -31,16 +32,21 @@
                 <button id="trainButton">Train Selected Model</button>
             </div>
              <div id="statusMessage" class="status"></div>
+
+             <!-- *** MOVED TRAINING STATS HERE *** -->
+             <h2>Training Statistics</h2>
+             <pre id="trainingStats">Training stats will appear here after training...</pre>
+             <!-- *** END MOVE *** -->
         </div>
 
+        <!-- Output Section -->
         <div class="output-section">
             <h2>Prediction Result</h2>
             <div id="predictionResult">Prediction will appear here...</div>
             <div class="chart-container">
                 <canvas id="probabilityChart"></canvas>
             </div>
-             <h2>Training Statistics</h2>
-             <pre id="trainingStats">Training stats will appear here...</pre>
+             <!-- Training Statistics H2 removed from here -->
         </div>
     </div>
 
