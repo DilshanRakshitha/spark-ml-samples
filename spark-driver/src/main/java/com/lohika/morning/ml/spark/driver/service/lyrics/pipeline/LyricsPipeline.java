@@ -9,7 +9,7 @@ public interface LyricsPipeline {
     // Trains the model and returns it
     CrossValidatorModel classify();
 
-    // Removed: Prediction logic is now primarily in LyricsService
+    // Removed: Prediction logic moved to LyricsService
     // GenrePrediction predict(String unknownLyrics);
 
     // Gets stats from a trained model instance

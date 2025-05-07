@@ -2,10 +2,9 @@ package com.lohika.morning.ml.spark.driver.service.lyrics;
 
 public enum Genre {
 
-    // *** CHANGE HERE: Removed symbols from display name ***
+    // Removed symbols from display name
     METAL("Metal", 0.0),
     POP("Pop", 1.0),
-    // *** END CHANGE ***
 
     // New genres for multi-class
     COUNTRY("Country", 2.0),
@@ -13,9 +12,9 @@ public enum Genre {
     JAZZ("Jazz", 4.0),
     REGGAE("Reggae", 5.0),
     ROCK("Rock", 6.0),
-    HIP_HOP("Hip Hop", 7.0),
+    HIP_HOP("Hip Hop", 7.0), // Note: CSV has "hip hop", we'll handle case in loading
 
-    UNKNOWN("Don't know :(", -1.0);
+    UNKNOWN("Don't know :(", -1.0); // Keep for unclassified or during prediction
 
     private final String name;
     private final Double value;
@@ -38,7 +37,7 @@ public enum Genre {
             return UNKNOWN;
         }
         for (Genre genre : Genre.values()) {
-            // Use tolerance for double comparison if needed, but equals should work for these specific values
+            // Use tolerance for double comparison if needed
              if (Math.abs(genre.getValue() - value) < 0.0001) {
                 return genre;
             }
@@ -59,7 +58,6 @@ public enum Genre {
             if (genre.name().equalsIgnoreCase(lowerText.replace(" ", "_"))) {
                 return genre;
             }
-             // Also check the (now cleaned) display name directly
             if (genre.getName().equalsIgnoreCase(text.trim())) {
                 return genre;
             }

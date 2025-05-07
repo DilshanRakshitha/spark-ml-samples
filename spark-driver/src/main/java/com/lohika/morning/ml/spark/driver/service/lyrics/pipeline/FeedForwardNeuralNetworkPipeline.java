@@ -4,9 +4,9 @@ import com.lohika.morning.ml.spark.distributed.library.function.map.lyrics.Colum
 import static com.lohika.morning.ml.spark.distributed.library.function.map.lyrics.Column.*;
 import com.lohika.morning.ml.spark.driver.service.lyrics.transformer.*;
 
-import java.util.ArrayList; // Import ArrayList
+import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.List; // Import List
+import java.util.List;
 import java.util.Map;
 
 import org.apache.spark.ml.Pipeline;
@@ -16,21 +16,25 @@ import org.apache.spark.ml.Transformer;
 import org.apache.spark.ml.classification.MultilayerPerceptronClassificationModel;
 import org.apache.spark.ml.classification.MultilayerPerceptronClassifier;
 import org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator;
-import org.apache.spark.ml.feature.*;
+import org.apache.spark.ml.feature.*; // Import feature package
 import org.apache.spark.ml.param.ParamMap;
 import org.apache.spark.ml.tuning.CrossValidator;
 import org.apache.spark.ml.tuning.CrossValidatorModel;
 import org.apache.spark.ml.tuning.ParamGridBuilder;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 @Component("FeedForwardNeuralNetworkPipeline")
 public class FeedForwardNeuralNetworkPipeline extends CommonLyricsPipeline {
 
+    private static final Logger log = LoggerFactory.getLogger(FeedForwardNeuralNetworkPipeline.class);
+
     @Override
     public CrossValidatorModel classify() {
-        Dataset<Row> sentences = readLyrics(); // This sets this.numClasses
+        Dataset<Row> sentences = readLyrics();
 
         if (this.numClasses < 2) {
              throw new IllegalStateException("FeedForwardNeuralNetworkPipeline requires at least 2 classes for training. Found: " + this.numClasses);
@@ -46,11 +50,19 @@ public class FeedForwardNeuralNetworkPipeline extends CommonLyricsPipeline {
         Verser verser = new Verser();
         Word2Vec word2Vec = new Word2Vec().setInputCol(Column.VERSE.getName()).setOutputCol("features").setMinCount(0);
 
+        // SQLTransformer to cast label to Integer
+        SQLTransformer castLabelToInt = new SQLTransformer()
+            .setStatement("SELECT *, CAST(label AS INT) AS intLabel FROM __THIS__");
+            // *** Removed the incorrect .set("labelCol", ...) line ***
+
+        int outputLayerSize = this.numClasses;
+        log.info("Setting MLPC output layer size to: {}", outputLayerSize);
 
         MultilayerPerceptronClassifier multilayerPerceptronClassifier = new MultilayerPerceptronClassifier()
                 .setBlockSize(128)
-                .setSeed(1234L);
-
+                .setSeed(1234L)
+                .setLabelCol("intLabel") // Tell MLPC to use the integer label column
+                .setFeaturesCol("features");
 
         Pipeline pipeline = new Pipeline().setStages(
                 new PipelineStage[]{
@@ -63,47 +75,49 @@ public class FeedForwardNeuralNetworkPipeline extends CommonLyricsPipeline {
                         uniter,
                         verser,
                         word2Vec,
-                        multilayerPerceptronClassifier});
+                        castLabelToInt, // Add the casting stage
+                        multilayerPerceptronClassifier // MLPC now uses intLabel
+                });
 
         int fixedW2VVectorSize = 100;
 
-        // *** Build grid for parameters *other* than layers ***
+        // Manually Build Param Grid for Layers
         ParamMap[] baseParamGrid = new ParamGridBuilder()
-                .addGrid(verser.sentencesInVerse(), new int[]{8, 16})
+                .addGrid(verser.sentencesInVerse(), new int[]{8})
                 .addGrid(word2Vec.vectorSize(), new int[] {fixedW2VVectorSize})
-                .addGrid(multilayerPerceptronClassifier.maxIter(), new int[] {50, 100})
+                .addGrid(multilayerPerceptronClassifier.maxIter(), new int[] {25})
                 .build();
 
-        // *** Manually add the layers configurations ***
         List<ParamMap> finalParamMaps = new ArrayList<>();
         int[][] layerOptions = {
-            new int[]{fixedW2VVectorSize, 50, this.numClasses},
-            new int[]{fixedW2VVectorSize, 30, this.numClasses}
+            new int[]{fixedW2VVectorSize, 50, outputLayerSize},
+            new int[]{fixedW2VVectorSize, 30, outputLayerSize}
         };
 
         for (ParamMap baseMap : baseParamGrid) {
             for (int[] layers : layerOptions) {
-                // Create a copy and add the specific layers setting
-                finalParamMaps.add(baseMap.copy().put(multilayerPerceptronClassifier.layers(), layers));
+                finalParamMaps.add(baseMap.copy().put(multilayerPerceptronClassifier.layers().w(layers)));
             }
         }
-
-        ParamMap[] paramGrid = finalParamMaps.toArray(new ParamMap[0]); // Convert List<ParamMap> back to ParamMap[]
+        ParamMap[] paramGrid = finalParamMaps.toArray(new ParamMap[0]);
 
 
         MulticlassClassificationEvaluator evaluator = getAccuracyEvaluator();
+        // Ensure evaluator uses the original double label column
+        evaluator.setLabelCol(LABEL.getName());
 
         CrossValidator crossValidator = new CrossValidator()
                 .setEstimator(pipeline)
                 .setEvaluator(evaluator)
-                .setEstimatorParamMaps(paramGrid) // Use the manually constructed grid
-                .setNumFolds(3);
+                .setEstimatorParamMaps(paramGrid)
+                .setNumFolds(2);
 
-        System.out.println("Starting training for FeedForward Neural Network with Cross-Validation...");
+        System.out.println("Starting training for FeedForward Neural Network (REDUCED SETTINGS, INT LABEL CAST) with Cross-Validation...");
+
         CrossValidatorModel model = crossValidator.fit(sentences);
-        System.out.println("Training finished for FeedForward Neural Network.");
+        System.out.println("Training finished for FeedForward Neural Network (REDUCED SETTINGS, INT LABEL CAST).");
 
-        saveModel(model, getModelDirectory());
+        saveModel(model, getModelDirectory() + "_quicktest");
 
         return model;
     }
