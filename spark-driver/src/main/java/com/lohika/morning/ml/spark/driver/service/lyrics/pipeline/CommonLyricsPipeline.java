@@ -16,16 +16,20 @@ import java.util.stream.Collectors;
 import org.apache.spark.ml.PipelineModel;
 import org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator;
 import org.apache.spark.ml.linalg.DenseVector;
-import org.apache.spark.ml.param.ParamMap; // Import added
+import org.apache.spark.ml.param.ParamMap;
 import org.apache.spark.ml.tuning.CrossValidatorModel;
 import org.apache.spark.sql.*;
-// import org.apache.spark.sql.api.java.UDF1; // No longer needed with registration
-// import org.apache.spark.sql.expressions.UserDefinedFunction; // No longer needed with registration
 import org.apache.spark.sql.types.DataTypes;
+import org.slf4j.Logger; // Import Logger
+import org.slf4j.LoggerFactory; // Import LoggerFactory
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 
+// Mark as abstract since it doesn't implement all methods directly (like getModelDirectory)
 public abstract class CommonLyricsPipeline implements LyricsPipeline {
+
+    // *** Add Logger Definition ***
+    private static final Logger log = LoggerFactory.getLogger(CommonLyricsPipeline.class);
 
     @Autowired
     protected SparkSession sparkSession;
@@ -39,57 +43,40 @@ public abstract class CommonLyricsPipeline implements LyricsPipeline {
     @Value("${lyrics.model.directory.path}")
     private String lyricsModelDirectoryPath;
 
-    protected int numClasses; // To store the number of actual classes used for training
+    protected int numClasses;
 
-    @Override
+    // *** Removed @Override *** since it's no longer in the interface
+    // This method is now effectively unused as prediction logic moved to the Service
+    // You could remove it entirely if desired, but keeping it doesn't hurt for now.
     public GenrePrediction predict(final String unknownLyrics) {
-        String lyrics[] = unknownLyrics.split("\\r?\\n");
-        Dataset<String> lyricsDataset = sparkSession.createDataset(Arrays.asList(lyrics),
-           Encoders.STRING());
+         log.warn("CommonLyricsPipeline.predict(String) called directly - This logic has moved to LyricsService. Returning UNKNOWN.");
+         // Simplified logic since this shouldn't be the main entry point for prediction anymore
+         String lyrics[] = unknownLyrics.split("\\r?\\n");
+         Dataset<String> lyricsDataset = sparkSession.createDataset(Arrays.asList(lyrics), Encoders.STRING());
+         Dataset<Row> unknownLyricsDataset = lyricsDataset
+                 .withColumnRenamed("value", VALUE.getName())
+                 .withColumn(LABEL.getName(), functions.lit(Genre.UNKNOWN.getValue()))
+                 .withColumn(ID.getName(), functions.monotonically_increasing_id().cast(DataTypes.StringType));
 
-        // Prepare the input DataFrame for prediction
-        Dataset<Row> unknownLyricsDataset = lyricsDataset
-                .withColumnRenamed("value", VALUE.getName()) // Match training input column
-                .withColumn(LABEL.getName(), functions.lit(Genre.UNKNOWN.getValue()))
-                .withColumn(ID.getName(), monotonically_increasing_id().cast(DataTypes.StringType)); // Add ID if needed
-
-
-        CrossValidatorModel model = mlService.loadCrossValidationModel(getModelDirectory());
-        System.out.println("Loaded model for prediction. Displaying its training statistics:");
-        getModelStatistics(model); // Display stats of the loaded model
-
-        PipelineModel bestModel = (PipelineModel) model.bestModel();
-
-        Dataset<Row> predictionsDataset = bestModel.transform(unknownLyricsDataset);
-
-        // Handle case where the input might result in no rows after transformations
-        // *** Fix: Changed isEmpty() to count() == 0 ***
-        if (predictionsDataset.count() == 0) {
-            System.out.println("Warning: Prediction resulted in an empty dataset for input: " + unknownLyrics);
-            return new GenrePrediction(Genre.UNKNOWN.getName());
+        try {
+             CrossValidatorModel model = loadModel();
+             PipelineModel bestModel = (PipelineModel) model.bestModel();
+             Dataset<Row> predictionsDataset = bestModel.transform(unknownLyricsDataset);
+             if (predictionsDataset.count() == 0) {
+                 return new GenrePrediction(Genre.UNKNOWN.getName());
+             }
+             Row predictionRow = predictionsDataset.first();
+             Double predictionLabel = predictionRow.getAs("prediction");
+             return new GenrePrediction(getGenreFromPredictionValue(predictionLabel).getName());
+        } catch (Exception e) {
+             log.error("Error in fallback predict method: {}", e.getMessage());
+             return new GenrePrediction(Genre.UNKNOWN.getName());
         }
-
-        Row predictionRow = predictionsDataset.first();
-
-        System.out.println("\n------------------- PREDICTION -------------------");
-        final Double prediction = predictionRow.getAs("prediction");
-        System.out.println("Predicted Label: " + prediction);
-        Genre predictedGenre = getGenreFromPredictionValue(prediction); // Use the updated method name
-        System.out.println("Predicted Genre: " + predictedGenre.getName());
-
-
-        if (Arrays.asList(predictionsDataset.columns()).contains("probability")) {
-            final DenseVector probability = predictionRow.getAs("probability");
-            System.out.println("Probability Vector: " + probability);
-        }
-        System.out.println("------------------------------------------------\n");
-
-        // Return prediction based on the predicted label
-        return new GenrePrediction(predictedGenre.getName());
     }
 
+    // --- readLyrics method remains the same as previous correct version ---
     Dataset<Row> readLyrics() {
-        System.out.println("Reading training data from CSV: " + lyricsTrainingSetCsvPath);
+        log.info("Reading training data from CSV: {}", lyricsTrainingSetCsvPath); // Use logger
 
         Dataset<Row> rawData = sparkSession.read()
                 .option("header", "true")
@@ -97,50 +84,42 @@ public abstract class CommonLyricsPipeline implements LyricsPipeline {
                 .option("escape", "\"")
                 .csv(lyricsTrainingSetCsvPath);
 
-        System.out.println("Raw CSV Schema:");
+        log.debug("Raw CSV Schema:"); // Use debug for schema
         rawData.printSchema();
 
-        // --- Genre to Label Mapping using Registered UDF ---
-        // *** Fix: Register UDF and use expr() ***
         sparkSession.udf().register("genreToLabel", (String genreString) -> {
             if (genreString == null) return Genre.UNKNOWN.getValue();
-            return Genre.fromString(genreString.toLowerCase().trim()).getValue(); // Use trim()
+            return Genre.fromString(genreString.toLowerCase().trim()).getValue();
         }, DataTypes.DoubleType);
 
-
         Dataset<Row> labeledData = rawData
-                .withColumnRenamed("lyrics", VALUE.getName()) // Rename lyrics column to 'value'
-                 // Apply UDF using Spark SQL expression syntax
+                .withColumnRenamed("lyrics", VALUE.getName())
                 .withColumn(LABEL.getName(), expr("genreToLabel(lower(trim(genre)))"))
-                .withColumn(ID.getName(), monotonically_increasing_id().cast(DataTypes.StringType)); // Add unique ID
+                .withColumn(ID.getName(), monotonically_increasing_id().cast(DataTypes.StringType));
 
-        // --- Filtering Data ---
         Dataset<Row> preparedData = labeledData
-                .filter(col(LABEL.getName()).notEqual(Genre.UNKNOWN.getValue())) // Keep only known genres
+                .filter(col(LABEL.getName()).notEqual(Genre.UNKNOWN.getValue()))
                 .filter(col(VALUE.getName()).isNotNull())
                 .filter(col(VALUE.getName()).notEqual(""))
-                .filter(col(VALUE.getName()).contains(" ")) // Keep original filter
-                .select(ID.getName(), LABEL.getName(), VALUE.getName()); // Select final columns
+                .filter(col(VALUE.getName()).contains(" "))
+                .select(ID.getName(), LABEL.getName(), VALUE.getName());
 
-
-        // --- Determine Number of Classes ---
         List<Row> distinctLabels = preparedData.select(LABEL.getName()).distinct().collectAsList();
         this.numClasses = distinctLabels.size();
-        System.out.println("Number of distinct classes found in data: " + this.numClasses);
-        System.out.println("Distinct labels found: " + distinctLabels.stream()
+        log.info("Number of distinct classes found in data: {}", this.numClasses);
+        log.info("Distinct labels found: {}", distinctLabels.stream()
                 .map(r -> r.getDouble(0))
                 .sorted()
                 .collect(Collectors.toList()));
-        System.out.println("Mapping:");
+        log.info("Mapping:");
         distinctLabels.stream()
                       .map(r -> r.getDouble(0))
                       .sorted()
-                      .forEach(labelVal -> System.out.println("  Label " + labelVal + " -> Genre: " + Genre.fromValue(labelVal).getName()));
+                      .forEach(labelVal -> log.info("  Label {} -> Genre: {}", labelVal, Genre.fromValue(labelVal).getName()));
 
-        // --- Caching and Validation ---
         preparedData = preparedData.repartition(sparkSession.sparkContext().defaultParallelism()).cache();
         long count = preparedData.count();
-        System.out.println("Final count of prepared sentences for training: " + count);
+        log.info("Final count of prepared sentences for training: {}", count);
 
 
         if (count == 0) {
@@ -150,12 +129,30 @@ public abstract class CommonLyricsPipeline implements LyricsPipeline {
             throw new RuntimeException("Not enough classes for classification. Found only " + this.numClasses + " valid class(es) after filtering. Need at least 2.");
         }
 
-        System.out.println("Sample of prepared data for training:");
+        log.info("Sample of prepared data for training:");
         preparedData.show(10, false);
 
         return preparedData;
     }
+    // --- End readLyrics ---
 
+
+    // --- loadModel method implementation (using logger) ---
+    @Override
+    public CrossValidatorModel loadModel() {
+        String modelPath = getModelDirectory();
+        log.info("Loading model from path: {}", modelPath); // Use logger
+        try {
+            return mlService.loadCrossValidationModel(modelPath);
+        } catch (Exception e) {
+            log.error("Failed to load model from {}. Has it been trained?", modelPath, e); // Use logger
+            throw new RuntimeException("Model not found or failed to load from: " + modelPath, e);
+        }
+    }
+    // --- End loadModel ---
+
+
+    // --- Other methods remain the same ---
     protected MulticlassClassificationEvaluator getAccuracyEvaluator() {
         return new MulticlassClassificationEvaluator()
                 .setLabelCol(LABEL.getName())
@@ -195,9 +192,8 @@ public abstract class CommonLyricsPipeline implements LyricsPipeline {
         return modelStatistics;
     }
 
-    // Renamed method to avoid conflict with Genre enum
     private Genre getGenreFromPredictionValue(Double value) {
-        return Genre.fromValue(value); // Use the static method from Genre enum
+        return Genre.fromValue(value);
     }
 
     void printModelStatistics(Map<String, Object> modelStatistics) {
