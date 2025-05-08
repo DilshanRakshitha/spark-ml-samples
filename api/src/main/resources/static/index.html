@@ -3,13 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lyrics Genre Prediction</title>
+    <title>Lyrics Genre Prediction (8 Classes)</title>
     <link rel="stylesheet" href="style.css">
     <!-- Include Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
-    <h1>Lyrics Genre Predictor & Trainer</h1>
+    <h1>Lyrics Genre Predictor & Trainer (8 Classes)</h1>
 
     <div class="container">
         <!-- Input Section -->
@@ -19,8 +19,9 @@
 
             <label for="modelSelect">Select Model:</label>
             <select id="modelSelect">
+                <!-- Ensure these values match your @Component names in Java -->
                 <option value="LogisticRegressionPipeline">Logistic Regression</option>
-                <!-- Removed Feed Forward Neural Network Option -->
+                <option value="FeedForwardNeuralNetworkPipeline">Feed Forward Neural Network</option>
                 <option value="NaiveBayesBagOfWordsPipeline">Naive Bayes (BoW)</option>
                 <option value="NaiveBayesTFIDFPipeline">Naive Bayes (TF-IDF)</option>
                 <option value="RandomForestPipeline">Random Forest</option>
@@ -31,22 +32,22 @@
                 <button id="predictButton">Predict Genre</button>
                 <button id="trainButton">Train Selected Model</button>
             </div>
-             <div id="statusMessage" class="status"></div>
+             <div id="statusMessage" class="status"></div> <!-- Status messages -->
 
-             <!-- *** MOVED TRAINING STATS HERE *** -->
+             <!-- Moved Training Statistics Here -->
              <h2>Training Statistics</h2>
              <pre id="trainingStats">Training stats will appear here after training...</pre>
-             <!-- *** END MOVE *** -->
         </div>
 
         <!-- Output Section -->
         <div class="output-section">
             <h2>Prediction Result</h2>
             <div id="predictionResult">Prediction will appear here...</div>
+            <!-- Chart container -->
             <div class="chart-container">
                 <canvas id="probabilityChart"></canvas>
             </div>
-             <!-- Training Statistics H2 removed from here -->
+             <!-- Training H2 removed from here -->
         </div>
     </div>
 
