@@ -87,7 +87,7 @@ public abstract class CommonLyricsPipeline implements LyricsPipeline {
         // Register UDF using lambda
         sparkSession.udf().register("genreToLabel", (String genreString) -> {
             if (genreString == null) return Genre.UNKNOWN.getValue();
-            return Genre.fromString(genreString.toLowerCase().trim()).getValue();
+            return Genre.fromName(genreString.toLowerCase().trim()).getValue();
         }, DataTypes.DoubleType);
 
         Dataset<Row> labeledData = rawData

@@ -16,13 +16,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.NoSuchBeanDefinitionException;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value; // <<< ADD THIS IMPORT
+import org.springframework.beans.factory.annotation.Value; // <<< ENSURE THIS IMPORT IS PRESENT
 import org.springframework.context.ApplicationContext;
 import org.springframework.stereotype.Component;
 
-// Removed javax.annotation.Resource as @Value is used
-import javax.annotation.PostConstruct;
-// import javax.annotation.Resource;
 import java.util.*;
 import java.util.stream.Collectors;
 import static com.lohika.morning.ml.spark.distributed.library.function.map.lyrics.Column.*;
@@ -47,9 +44,14 @@ public class LyricsService {
             "RandomForestPipeline"
     );
 
-    // Using @Value for the default pipeline name
     @Value("${lyrics.pipeline}")
     private String defaultPipelineName;
+
+    @Value("${lyrics.training.set.csv.path}")
+    private String trainingDataPath; // For logging or direct use if pipelines don't get it
+
+    @Value("${lyrics.model.directory.path}")
+    private String modelBasePath; // For logging or direct use
 
 
     private LyricsPipeline getPipeline(String modelName) {
@@ -67,7 +69,7 @@ public class LyricsService {
     }
 
     public Map<String, Object> classifyLyrics(String modelName) {
-        log.info("Received request to train model: {}", modelName);
+        log.info("Received request to train model: {} using data: {} and saving to: {}", modelName, trainingDataPath, modelBasePath);
         LyricsPipeline pipeline = getPipeline(modelName);
         CrossValidatorModel model = pipeline.classify();
         Map<String, Object> stats = pipeline.getModelStatistics(model);
@@ -76,7 +78,7 @@ public class LyricsService {
     }
 
     public GenrePrediction predictGenre(final String modelName, final String unknownLyrics) {
-         log.info("Received prediction request for model '{}'", modelName);
+         log.info("Received prediction request for model '{}' from base path '{}'", modelName, modelBasePath);
          LyricsPipeline pipeline = getPipeline(modelName);
 
          try {
@@ -93,8 +95,7 @@ public class LyricsService {
 
              Dataset<Row> predictionsDataset = bestModel.transform(unknownLyricsDataset);
 
-             // *** Fix: Changed isEmpty() to count() == 0 ***
-             if (predictionsDataset.count() == 0) {
+             if (predictionsDataset.count() == 0) { // Corrected from isEmpty()
                 log.warn("Prediction resulted in empty dataset for model {}", modelName);
                 return new GenrePrediction(Genre.UNKNOWN.getName());
              }
@@ -103,16 +104,21 @@ public class LyricsService {
 
              Double predictionLabel = predictionRow.getAs("prediction");
              Genre predictedGenre = Genre.fromValue(predictionLabel);
-             Map<String, Double> probabilityMap = new HashMap<>(); // Initialize map here
+             Map<String, Double> probabilityMap = new HashMap<>();
 
              if (Arrays.asList(predictionsDataset.columns()).contains("probability")) {
                  Vector probabilityVector = predictionRow.getAs("probability");
-                 for (Genre genre : Genre.values()) {
-                     if (genre != Genre.UNKNOWN) {
-                         int index = genre.getValue().intValue();
-                         if (index >= 0 && index < probabilityVector.size()) {
-                             probabilityMap.put(genre.getName(), probabilityVector.apply(index));
-                         }
+                 // IMPORTANT ASSUMPTION: The order of probabilities in `probabilityVector`
+                 // matches the numerical order of `Genre.getValue()` for predictable genres (0.0 to 7.0).
+                 // If StringIndexer orders labels differently (e.g., alphabetically), this mapping will be incorrect.
+                 // A more robust solution would involve extracting label order from the StringIndexerModel.
+                 for (Genre genre : Genre.getPredictableGenres()) { // Iterate through Pop, Rock, ..., Dance
+                     int index = genre.getValue().intValue(); // 0 for Pop, 1 for Rock, ..., 7 for Dance
+                     if (index >= 0 && index < probabilityVector.size()) {
+                         probabilityMap.put(genre.getName(), probabilityVector.apply(index));
+                     } else {
+                         log.warn("Index {} for genre {} is out of bounds for probability vector size {}.",
+                                 index, genre.getName(), probabilityVector.size());
                      }
                  }
                  log.debug("Probabilities calculated: {}", probabilityMap);
@@ -123,8 +129,10 @@ public class LyricsService {
             return new GenrePrediction(predictedGenre.getName(), probabilityMap.isEmpty() ? null : probabilityMap);
 
          } catch (Exception e) {
-              log.error("Error during prediction for model '{}'", modelName, e);
-              return new GenrePrediction(Genre.UNKNOWN.getName());
+              log.error("Error during prediction for model '{}': {}", modelName, e.getMessage(), e);
+              Map<String, Double> errorDetails = new HashMap<>();
+              errorDetails.put("error", -1.0); // Generic error indicator
+              return new GenrePrediction(Genre.UNKNOWN.getName() + ": Prediction Failed", errorDetails);
          }
     }
 }

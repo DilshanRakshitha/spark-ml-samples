@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
-# Purpose: Build and run the Spark ML Samples API application.
+# Purpose: Build and run the Spark ML Samples API application,
+#          and attempt to open the frontend in the browser.
 # Place this script in the root directory: dilshanrakshitha-spark-ml-samples/
 # Usage: ./run.sh
 
@@ -9,17 +10,52 @@ set -e
 
 # --- Configuration ---
 EXPECTED_PORT=9090
+FRONTEND_URL="http://localhost:${EXPECTED_PORT}"
 # Adjust the pattern if your shadow JAR naming convention is different
 JAR_NAME_PATTERN="api-*-SNAPSHOT.jar"
 API_BUILD_DIR="api/build/libs"
+# Time to wait for the server to start before trying to open the browser (in seconds)
+SERVER_START_WAIT_TIME=5
 
 # --- Functions ---
 cleanup() {
+  echo "" # Newline for better readability after Ctrl+C
   echo "Script interrupted. Stopping application (if running)..."
-  # Find and kill the Java process - might need refinement depending on the system
-  # This is a basic attempt; a more robust solution might use PID files.
-  pkill -f "$JAR_NAME_PATTERN" || echo "Application process not found or already stopped."
+  # Find and kill the Java process
+  # Using pkill with a more specific pattern if possible, or kill the background PID
+  if [ -n "$APP_PID" ]; then
+    kill "$APP_PID" 2>/dev/null || echo "Application process with PID $APP_PID not found or already stopped."
+  else
+    # Fallback to pkill if PID wasn't captured (e.g., if run without backgrounding)
+    pkill -f "$JAR_NAME_PATTERN" || echo "Application process (pkill) not found or already stopped."
+  fi
   exit 1
+}
+
+open_browser() {
+  local url="$1"
+  echo "Attempting to open $url in your default browser..."
+  # Cross-platform browser opening
+  if [[ "$(uname)" == "Darwin" ]]; then # macOS
+    open "$url"
+  elif [[ "$(expr substr $(uname -s) 1 5)" == "Linux" ]]; then # Linux
+    # Check for common browsers
+    if command -v xdg-open &> /dev/null; then
+      xdg-open "$url"
+    elif command -v gnome-open &> /dev/null; then
+      gnome-open "$url"
+    elif command -v sensible-browser &> /dev/null; then
+      sensible-browser "$url"
+    else
+      echo "Could not find a command to open the browser (xdg-open, gnome-open, sensible-browser)."
+      echo "Please open $url manually."
+    fi
+  elif [[ "$(expr substr $(uname -s) 1 10)" == "MINGW32_NT" || "$(expr substr $(uname -s) 1 10)" == "MINGW64_NT" || "$(expr substr $(uname -s) 1 5)" == "MSYS_" ]]; then # Git Bash or MSYS on Windows
+    start "$url"
+  else
+    echo "Unsupported OS for automatic browser opening: $(uname)"
+    echo "Please open $url manually."
+  fi
 }
 
 # Trap SIGINT (Ctrl+C) and SIGTERM to attempt cleanup
@@ -46,9 +82,7 @@ echo "----------------------------------------"
 echo "----------------------------------------"
 echo "2. Finding the application JAR file..."
 echo "----------------------------------------"
-# Find the shadow JAR in the api module's build output
-# Using the pattern defined above. Takes the first match if multiple exist.
-JAR_FILE=$(find "$API_BUILD_DIR" -name "$JAR_NAME_PATTERN" | head -n 1)
+JAR_FILE=$(find "$API_BUILD_DIR" -name "$JAR_NAME_PATTERN" -print -quit) # -quit after first find
 
 if [ -z "$JAR_FILE" ]; then
     echo ""
@@ -62,22 +96,46 @@ echo "----------------------------------------"
 
 
 echo "----------------------------------------"
-echo "3. Starting the Spark ML Samples API application..."
+echo "3. Starting the Spark ML Samples API application in the background..."
 echo "----------------------------------------"
-echo "The application will attempt to start on http://localhost:${EXPECTED_PORT}"
-echo "Press Ctrl+C to stop the application."
+echo "The application will attempt to start on $FRONTEND_URL"
+echo "Logs will be in api_app.log. Press Ctrl+C to stop the application and this script."
 echo ""
 
-# Run the JAR file using Java
-# The application.properties inside the JAR should configure it for the expected port
-java -jar "$JAR_FILE"
+# Run the JAR file using Java in the background and get its PID
+java -jar "$JAR_FILE" > api_app.log 2>&1 &
+APP_PID=$!
+echo "Application started with PID: $APP_PID. Waiting for it to initialize..."
 
-# Note: The script will stay on the 'java -jar' command until the application
-# is stopped (e.g., with Ctrl+C, which is handled by the trap).
+# Wait for a few seconds for the server to start
+sleep "$SERVER_START_WAIT_TIME"
+
+# Check if the process is still running
+if ! ps -p "$APP_PID" > /dev/null; then
+  echo "ERROR: Application failed to start. Check api_app.log for details."
+  exit 1
+fi
+echo "Application likely initialized."
+echo "----------------------------------------"
+
+# Attempt to open the browser
+open_browser "$FRONTEND_URL"
+echo "----------------------------------------"
+
+echo ""
+echo "Application is running in the background (PID: $APP_PID)."
+echo "View logs with: tail -f api_app.log"
+echo "Press Ctrl+C to stop the application and this script."
+echo ""
+
+# Wait for the background process to finish (e.g., if it's stopped by Ctrl+C)
+# This makes the script wait here, so Ctrl+C in the terminal will trigger the trap.
+wait "$APP_PID"
+EXIT_STATUS=$? # Capture exit status of the Java app
 
 echo ""
 echo "----------------------------------------"
-echo "Application finished or stopped."
+echo "Application (PID: $APP_PID) has finished or been stopped with status $EXIT_STATUS."
 echo "----------------------------------------"
 
-exit 0
+exit "$EXIT_STATUS"

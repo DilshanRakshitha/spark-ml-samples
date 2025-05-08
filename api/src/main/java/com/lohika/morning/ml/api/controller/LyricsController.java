@@ -3,7 +3,7 @@ package com.lohika.morning.ml.api.controller;
 import com.lohika.morning.ml.api.service.LyricsService;
 import com.lohika.morning.ml.spark.driver.service.lyrics.GenrePrediction;
 import java.util.Map;
-import java.util.HashMap; // <<< ADD THIS IMPORT
+import java.util.HashMap; // <<< ENSURE THIS IMPORT IS PRESENT
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -29,12 +29,12 @@ public class LyricsController {
             return new ResponseEntity<>(trainStatistics, HttpStatus.OK);
         } catch (IllegalArgumentException e) {
              log.error("Bad request for training model {}: {}", modelName, e.getMessage());
-             Map<String, Object> errorResponse = new HashMap<>(); // Now HashMap is recognized
+             Map<String, Object> errorResponse = new HashMap<>();
              errorResponse.put("error", e.getMessage());
              return new ResponseEntity<>(errorResponse, HttpStatus.BAD_REQUEST);
         } catch (Exception e) {
             log.error("Internal server error training model {}: {}", modelName, e.getMessage(), e);
-            Map<String, Object> errorResponse = new HashMap<>(); // Now HashMap is recognized
+            Map<String, Object> errorResponse = new HashMap<>();
             errorResponse.put("error", "Internal server error during training.");
             return new ResponseEntity<>(errorResponse, HttpStatus.INTERNAL_SERVER_ERROR);
         }
@@ -53,11 +53,16 @@ public class LyricsController {
             return new ResponseEntity<>(genrePrediction, HttpStatus.OK);
          } catch (IllegalArgumentException e) {
              log.error("Bad request for predicting with model {}: {}", modelName, e.getMessage());
-             GenrePrediction errorPrediction = new GenrePrediction("Error: " + e.getMessage());
+             // Construct a GenrePrediction with an error message
+             Map<String, Double> errorProbs = new HashMap<>();
+             errorProbs.put("error", -1.0); // Indicate error in probability
+             GenrePrediction errorPrediction = new GenrePrediction("Error: " + e.getMessage(), errorProbs);
              return new ResponseEntity<>(errorPrediction, HttpStatus.BAD_REQUEST);
          } catch (Exception e) {
             log.error("Internal server error predicting with model {}: {}", modelName, e.getMessage(), e);
-            GenrePrediction errorPrediction = new GenrePrediction("Error: Internal Server Error");
+            Map<String, Double> errorProbs = new HashMap<>();
+            errorProbs.put("error", -1.0);
+            GenrePrediction errorPrediction = new GenrePrediction("Error: Internal Server Error", errorProbs);
             return new ResponseEntity<>(errorPrediction, HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
